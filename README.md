@@ -12,6 +12,7 @@ Markdown support here is very limited. The flavour of the markdown is described 
 *bold* -> <b>bold</b>
 _italic_ -> <i>italic</i>
 ~cancelled~ -> <strike>cancelled</strike>
+- List item -> <li>List Item</li>
 ```
 
 ## TODO
