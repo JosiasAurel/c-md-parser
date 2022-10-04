@@ -284,6 +284,7 @@ void join_and_save(char* outfile_name)
         }
         node = node->next;
     }
+    fclose(out);
 }
 int main(int argc, char* argv[]) {
     
@@ -299,7 +300,8 @@ int main(int argc, char* argv[]) {
     FILE* file = fopen(input_file, "r");
     
     text_as_ll(file); // convert the contents of the file to a linked list
-    naive_traverse(); 
+    fclose(file);
+    // naive_traverse(); 
     parse();
     join_and_save(output_file);
     return 0;

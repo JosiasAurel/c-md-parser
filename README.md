@@ -1,4 +1,3 @@
-
 # C Markdown Parser
 
 This is a C program that can convert basic markdown text into a HTML document and rendered in the browser.
@@ -21,3 +20,5 @@ A list of interesting things I want to do with this code.
 
 - [ ] Write a WASM module out of the transpiler
 - [ ] Build a web application that will use the WASM module for rendering markdown
+
+> For some reason, building with gcc will make the program crash at runtime (`malloc()`) while it will compile and run successfully with clang.
