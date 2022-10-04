@@ -123,17 +123,102 @@ void naive_traverse()
     struct Node* curr_node = ll.head;
     for (int i = 0; i < ll.count; i++)
     {
-        printf("%s \n", curr_node->value);
+        printf("%s", curr_node->value);
         curr_node = curr_node->next;
     }
 }
 
-// reads text and transforms each piece of word into a Linked List
-LL* text_as_ll(FILE* file)
+// reads text and writes each word into a Linked List
+void text_as_ll(FILE* file)
 {
-
+    char c = getc(file);
+    char buffer[100];
+    int idx = 0;
+    while (c != EOF)
+    {
+        if (c != ' ' && c != '\n')
+        {
+            buffer[idx] = c;
+            idx++;
+        } 
+        else
+        {
+            append(buffer);
+            idx = 0;
+            for (int i = 0; i < 100; i++)
+            {
+                buffer[i] = 0;
+            }
+            if (c == '\n') append("\n");
+            if (c == ' ') append(" ");
+        }
+        c = getc(file);
+    }
 }
 
+// converts headings to corresponding html tags
+void match_headings(int idx)
+{
+    int h_count = 0;
+    // count the number of headings
+    struct Node* node = node_at(idx);
+    for (int i = 0; i < 4; i++)
+    {
+        if (node->value[i] == '#')
+        {
+            h_count++;
+        } else break;
+    }
+
+    struct Node* next_node = node->next;
+    int last_word_idx = idx+1; // index of last word before the next \n
+    while (strcmp(next_node->value, "\n") != 0)
+    {
+        next_node = next_node->next;
+        last_word_idx++;
+    }
+
+    char opening[6];
+    char closing[6];
+    
+    sprintf(opening, "<h%d>", h_count);
+    sprintf(closing, "</h%d>", h_count);
+    
+    insert_before(idx+1, opening);
+    insert_after(last_word_idx, closing);
+   
+    delete(idx);
+}
+
+void parse()
+{
+    struct Node* node = ll.head;
+    int idx = 1;
+    while (node->next != NULL)
+    {
+        if (node->value[0] == '#' && (strcmp(node->next->value, " ") == 0))
+        {
+            match_headings(idx);
+        } else idx++;
+        node = node_at(idx);
+        // idx++;
+    }
+}
+
+void join_and_save(char* outfile_name)
+{
+    FILE* out = fopen(outfile_name, "w");
+    struct Node* node = ll.head;
+    for (int i = 0; i < ll.count && node != NULL; i++)
+    {
+        int length = strlen(node->value);
+        for (int j = 0; j < length; j++)
+        {
+            putc(node->value[j], out);
+        }
+        node = node->next;
+    }
+}
 int main(int argc, char* argv[]) {
     
     // check if there are 3 arguments
@@ -144,9 +229,13 @@ int main(int argc, char* argv[]) {
      
     char* input_file = argv[1];
     char* output_file = argv[2];
-   
-    FILE* file = fopen(input_file, "r");
 
+    FILE* file = fopen(input_file, "r");
+    
+    text_as_ll(file); // convert the contents of the file to a linked list
+    naive_traverse(); 
+    parse();
+    join_and_save(output_file);
     return 0;
 }
 
