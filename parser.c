@@ -194,6 +194,23 @@ void match_headings(int idx)
     delete(idx+1); // delete the whitespace after it
 }
 
+// converts list into unordered list
+void match_list(int idx)
+{
+    struct Node* node = node_at(idx);
+    struct Node* next = node->next;
+    int last_node_idx = idx+1;
+    while (strcmp(next->value, "\n") != 0)
+    {
+        next = next->next;
+        last_node_idx++;
+    }
+    strcpy(node->value, "<li>");
+    insert_after(last_node_idx, "</li>");
+    insert_after(last_node_idx+1, "\n");
+}
+
+
 // matches _,*,~
 void match_duals(int idx)
 {
@@ -230,11 +247,22 @@ void parse()
     int idx = 1;
     while (node->next != NULL)
     {
-        if (strcmp(node->value, "*") == 0 || strcmp(node->value, "_") == 0 || strcmp(node->value, "~") == 0)
+        if (
+                strcmp(node->value, "*") == 0 
+                || strcmp(node->value, "_") == 0 
+                || strcmp(node->value, "~") == 0
+            )
         {
             match_duals(idx);
         }
-        if (node->value[0] == '#' && (strcmp(node->next->value, " ") == 0))
+        if (strcmp(node->value, "-") == 0)
+        {
+            if (idx == 1 || strcmp(node_at(idx-1)->value, "\n") == 0) match_list(idx);
+        }
+        if ( (idx == 1 || strcmp(node_at(idx-1)->value, "\n") == 0)
+                && node->value[0] == '#' 
+                && (strcmp(node->next->value, " ") == 0)
+            )
         {
             match_headings(idx);
         } else idx++;
