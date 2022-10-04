@@ -3,5 +3,6 @@
 ### How are
 #### Things going
 
-*italic* text and **bold** text here. 
+_italic_ text and *bold* text here. 
 
+~This text is cancelled~

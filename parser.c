@@ -6,7 +6,7 @@ struct Node
 {
     struct Node* prev;
     struct Node* next;
-    char value[100];
+    char value[20];
 };
 
 typedef struct 
@@ -132,11 +132,11 @@ void naive_traverse()
 void text_as_ll(FILE* file)
 {
     char c = getc(file);
-    char buffer[100];
+    char buffer[20];
     int idx = 0;
     while (c != EOF)
     {
-        if (c != ' ' && c != '\n')
+        if (c != ' ' && c != '\n' && c != '*' && c != '_' && c != '~')
         {
             buffer[idx] = c;
             idx++;
@@ -145,12 +145,15 @@ void text_as_ll(FILE* file)
         {
             append(buffer);
             idx = 0;
-            for (int i = 0; i < 100; i++)
+            for (int i = 0; i < 20; i++)
             {
                 buffer[i] = 0;
             }
             if (c == '\n') append("\n");
             if (c == ' ') append(" ");
+            if (c == '*') append("*");
+            if (c == '_') append("_");
+            if (c == '~') append("~");
         }
         c = getc(file);
     }
@@ -187,7 +190,38 @@ void match_headings(int idx)
     insert_before(idx+1, opening);
     insert_after(last_word_idx, closing);
    
-    delete(idx);
+    delete(idx); // delete the hashtags
+    delete(idx+1); // delete the whitespace after it
+}
+
+// matches _,*,~
+void match_duals(int idx)
+{
+    // find next special character
+    struct Node* node = node_at(idx);
+    struct Node* next = node->next;
+    while (strcmp(next->value, "\n") != 0)
+    { 
+        if (strcmp(next->value, "*") == 0)
+        {
+            strcpy(node->value, "<b>");
+            strcpy(next->value, "</b>");
+            break;
+        } else if (strcmp(next->value, "_") == 0)
+        {
+            strcpy(node->value, "<i>");
+            strcpy(next->value, "</i>");
+            break;
+        }
+        else if (strcmp(next->value, "~") == 0)
+        {
+            strcpy(node->value, "<strike>");
+            strcpy(next->value, "</strike>");
+            break;
+        }
+
+        next = next->next;
+    } return;
 }
 
 void parse()
@@ -196,6 +230,10 @@ void parse()
     int idx = 1;
     while (node->next != NULL)
     {
+        if (strcmp(node->value, "*") == 0 || strcmp(node->value, "_") == 0 || strcmp(node->value, "~") == 0)
+        {
+            match_duals(idx);
+        }
         if (node->value[0] == '#' && (strcmp(node->next->value, " ") == 0))
         {
             match_headings(idx);
