@@ -35,14 +35,14 @@
         <script src="./a.out.js"> </script>
             <script>
                 Module.onRuntimeInitialized = _ => {
-                    document.getElementById("content-in").addEventListener("change", e => {
+                    document.getElementById("content-in").oninput = function() {
                         // let result = Module.ccall("eat_and_poop", "string", ["string"], [`${e.target.value}`]);
-                        const str_ptr = allocateUTF8(e.target.value);
+                        const str_ptr = allocateUTF8(this.value);
                         const result = UTF8ToString(_eat_and_poop(str_ptr));
                         console.log(result);
                         document.getElementById("content-out").innerHTML = result;
                         _free(str_ptr);
-                    });
+                    }
                 }
             </script>
     </body>
