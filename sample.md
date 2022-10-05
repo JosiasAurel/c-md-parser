@@ -9,3 +9,16 @@ _italic_ text and *bold* text here.
 
 - A list item
 - Another list item
+
+
+# Hello
+## World
+### How are
+#### Things going
+
+_italic_ text and *bold* text here. 
+
+~This text is cancelled~
+
+- A list item
+- Another list item

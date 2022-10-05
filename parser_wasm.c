@@ -2,6 +2,9 @@
 #include <string.h>
 #include <stdlib.h>
 
+// emscripten magic
+#include <emscripten.h>
+
 struct Node
 {
     struct Node* prev;
@@ -18,6 +21,7 @@ typedef struct
 
 LL ll = { .head = NULL, .tail = NULL, .count = 0 };
 
+
 struct Node* create_node(const char* value)
 {
     struct Node* node = malloc(sizeof(struct Node));
@@ -25,7 +29,8 @@ struct Node* create_node(const char* value)
     return node;
 }
 
-void append(const char* value)
+
+int append(const char* value)
 {
     ll.count++;
     struct Node* new_node = create_node(value);
@@ -35,14 +40,15 @@ void append(const char* value)
         new_node->prev = NULL;
         ll.head = new_node;
         ll.tail = new_node;
-        return;
+        return 0;
     }
     // ll.head = new_node;
     new_node->prev = ll.tail;
     ll.tail->next = new_node;
     ll.tail = new_node;
-    return;
+    return 0;
 }
+
 
 struct Node* node_at(int index)
 {
@@ -60,6 +66,7 @@ struct Node* node_at(int index)
 // insert the value at the specified index
 // if there is a node at the position, it will push that node forward
 // if there is no node at that index, it will return -1
+
 int insert_before(int index, char* value) {
     struct Node* node = create_node(value);
     struct Node* node_at_index = node_at(index);
@@ -75,6 +82,7 @@ int insert_before(int index, char* value) {
     ll.count++;
     return 0;
 }
+
 
 int insert_after(int index, char* value)
 {
@@ -94,7 +102,8 @@ int insert_after(int index, char* value)
 }
 
 // thou shall silently crash
-void delete(int index)
+
+int delete(int index)
 {
     struct Node* node = node_at(index);
     if (node != NULL)
@@ -116,21 +125,21 @@ void delete(int index)
         free(node); // PURGE!!!!!!!!!!!!! 
         ll.count--;
     }
+    return 0;
 }
 
 // this will free all memory allocated
+
 void clear_ll()
 {
-    struct Node* node = ll.head;
     for (int i = 0; i < ll.count; i++)
     {
-        struct Node* c_node = node;
-        node = node->next;
-        free(c_node);
+        delete(i+1);
     }
 }
 
-void naive_traverse()
+
+int naive_traverse()
 {
     struct Node* curr_node = ll.head;
     for (int i = 0; i < ll.count; i++)
@@ -138,16 +147,22 @@ void naive_traverse()
         printf("%s", curr_node->value);
         curr_node = curr_node->next;
     }
+    return 0;
 }
 
+char content_in[10000];
+char content_out[10000];
+
 // reads text and writes each word into a Linked List
-void text_as_ll(FILE* file)
+void text_as_ll()
 {
-    char c = getc(file);
-    char buffer[40];
+    char buffer[20];
     int idx = 0;
-    while (c != EOF)
+    int cid = 0;
+    char c = content_in[cid];
+    while (c != '\0')
     {
+        // printf("Value of C = %c \n", c);
         if (
                 c != ' ' 
                 && c != '\n' 
@@ -161,6 +176,7 @@ void text_as_ll(FILE* file)
         } 
         else
         {
+            // printf("Buffer = %s \n", buffer);
             append(buffer);
             idx = 0;
             for (int i = 0; i < 20; i++)
@@ -174,11 +190,16 @@ void text_as_ll(FILE* file)
             if (c == '~') append("~");
             if (c == '`') append("`");
         }
-        c = getc(file);
+        cid++;
+        c = content_in[cid];
     }
+    // printf("%s \n", buffer);
+    append(buffer);
+    append("\n");
 }
 
 // converts headings to corresponding html tags
+
 void match_headings(int idx)
 {
     int h_count = 0;
@@ -214,6 +235,7 @@ void match_headings(int idx)
 }
 
 // handle blockquotes
+
 void match_block(int idx)
 {
     struct Node* node = node_at(idx);
@@ -229,6 +251,7 @@ void match_block(int idx)
     insert_after(last_word_idx, "</blockquote>");
 }
 // converts list into unordered list
+
 void match_list(int idx)
 {
     struct Node* node = node_at(idx);
@@ -246,6 +269,7 @@ void match_list(int idx)
 
 
 // matches _,*,~,`,´´´
+
 void match_duals(int idx)
 {
     // find next special character
@@ -281,6 +305,7 @@ void match_duals(int idx)
     } return;
 }
 
+
 void parse()
 {
     struct Node* node = ll.head;
@@ -311,46 +336,37 @@ void parse()
             )
         {
             match_headings(idx);
-        } else idx++;
+        } else idx++; 
         node = node_at(idx);
         // idx++;
     }
 }
 
-void join_and_save(char* outfile_name)
+void  join_and_out()
 {
-    FILE* out = fopen(outfile_name, "w");
+    int out_at = 0; // keeps track of which position at which we are in the content_out string
     struct Node* node = ll.head;
     for (int i = 0; i < ll.count && node != NULL; i++)
     {
         int length = strlen(node->value);
         for (int j = 0; j < length; j++)
         {
-            putc(node->value[j], out);
+            content_out[out_at] = node->value[j];
+            out_at++;
         }
         node = node->next;
     }
-    fclose(out);
 }
-int main(int argc, char* argv[]) {
-    
-    // check if there are 3 arguments
-    // first is the binary file name
-    // second and third should be the input and output file names 
-    if (argc == 3) {} 
-    else { printf("Not enough or too many arguments \n"); exit(1); }
-     
-    char* input_file = argv[1];
-    char* output_file = argv[2];
 
-    FILE* file = fopen(input_file, "r");
-    
-    text_as_ll(file); // convert the contents of the file to a linked list
-    fclose(file);
-    // naive_traverse(); 
-    parse();
-    join_and_save(output_file);
-    clear_ll();
-    return 0;
+EMSCRIPTEN_KEEPALIVE
+char* eat_and_poop(char* text_in)
+{
+    strcpy(content_in, text_in); // eat text
+    text_as_ll();
+    parse(); // digest
+    join_and_out(); // poop
+    // clear_ll();
+    clear_ll(); ll.count = 0; ll.head = NULL; ll.tail = NULL; // just making sure
+    return content_out;
 }
 

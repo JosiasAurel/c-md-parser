@@ -1,0 +1,50 @@
+
+<html>
+    <head> <title> Hello World from WASM </title> </head>
+    <body>
+
+        <textarea id="content-in">
+        </textarea>
+        <div id="content-out">
+        </div>
+    <style>
+* {
+    box-sizing: border-box;
+}
+                body {
+                    margin: 0 auto;
+                    display: flex;
+                    flex-direction: row;
+                    justify-content: space-evenly;
+                    align-items: center;
+                    overflow: hidden;
+                }
+                textarea {
+                    width: 50vw;
+                    height: 100vh;
+                }
+                div {
+                    width: 50vw;
+                    height: 100vh;
+                }
+
+                textarea, div {
+                    overflow-y: scroll;
+                }
+    </style>
+        <script src="./a.out.js"> </script>
+            <script>
+                Module.onRuntimeInitialized = _ => {
+                    document.getElementById("content-in").addEventListener("change", e => {
+                        // let result = Module.ccall("eat_and_poop", "string", ["string"], [`${e.target.value}`]);
+                        const str_ptr = allocateUTF8(e.target.value);
+                        const result = UTF8ToString(_eat_and_poop(str_ptr));
+                        console.log(result);
+                        document.getElementById("content-out").innerHTML = result;
+                        _free(str_ptr);
+                    });
+                }
+            </script>
+    </body>
+</html>
+
