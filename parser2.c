@@ -1,0 +1,299 @@
+/*
+A new version of the md-to-html converter using a stack and some clearer reason if I may say so
+
+Should be able to convert basic markdown to html
+Consider supporting 
+- Headings (#)
+- Italics (_ _)
+- Bold text (* * )
+- Strikethrough (~ ~)
+- List item (-)
+
+* These operations should be nestable 
+
+> Some things to keep in mind
+Modifier pairs
+# -> \n
+_ -> _
+* -> *
+~ -> ~
+- -> \n
+
+Algorithm
+
+fn parse()
+  Stack s
+  Iter text c
+    if c is opening
+      push c 
+    elif c is closing
+      c is closingOf peek()
+      pop()
+
+# At the end we are left with either an empty stack or a stack that contains an element we are going to 
+# interpret as is in the text
+
+fn htmlize()
+  Stack s
+  Iter through text c
+    push c (enum)
+    if index c not in any in previous_s
+      replace with corresponding opening
+    else
+      replace with corresponding closing
+
+*/
+
+
+#include <stdio.h>
+#include <stdlib.h>
+#define true 1
+#define false 0
+
+enum TokenKind {
+  TOKEN_BOLD,
+  TOKEN_HASH,
+  TOKEN_ITALIC,
+  TOKEN_LIST
+};
+
+typedef struct {
+  char mod;
+  int idx;
+  int count; // used only in the case of a #
+} Modifier;
+
+typedef struct {
+  int count;
+  Modifier* mod[100];
+  int idx;
+  int idx_imut;
+  int peek_idx;
+} Stack;
+
+void preprocess(FILE*, Stack*);
+int modifier_in_stack(Stack*, char);
+const char* get_tag(char, int, int);
+void write_tag(FILE* file, const char* tag);
+void htmlize(Stack*);
+
+void push(Stack* stack, Modifier* item) {
+  Modifier* item_ptr = (Modifier*)malloc(sizeof(Modifier));
+  item_ptr->count = item->count;
+  item_ptr->idx = item->idx;
+  item_ptr->mod = item->mod;
+  stack->mod[stack->idx] = item_ptr;
+  stack->idx++;
+  stack->peek_idx++;
+}
+
+Modifier peek(Stack* stack) {
+  Modifier result;
+  result.count = stack->mod[stack->idx - 1]->count;
+  result.mod = stack->mod[stack->idx -1]->mod;
+  result.idx = stack->mod[stack->idx - 1]->idx;
+  return result;
+}
+
+Modifier pop(Stack* stack) {
+  stack->idx--;
+  stack->idx_imut--;
+  Modifier result;
+  result.count = stack->mod[stack->idx]->count;
+  result.mod = stack->mod[stack->idx]->mod;
+  result.idx = stack->mod[stack->idx]->idx;
+  free(stack->mod[stack->idx]);
+  return result;
+}
+
+int main() {
+  Stack stack = {.idx = 0, .peek_idx = 0};
+  FILE* file = fopen("./some.md", "r");
+  preprocess(file, &stack);
+  fclose(file);
+  htmlize(&stack);
+  // parse(sample);
+}
+
+void preprocess(FILE * file, Stack* stack) {
+
+  int idx = 0;
+  char c = getc(file);
+  while (c != EOF) {
+    if (c == '#') {
+      Modifier mod = {.idx = idx, .mod = '#', .count = 1};
+      if (stack->idx > 0) {
+        Modifier item = pop(stack);
+        if (item.mod == '#') item.count++;
+        push(stack, &item);
+      } else push(stack, &mod);
+    } else if (c == '-') {
+      Modifier mod = {.idx = idx, .mod = '-'};
+      push(stack, &mod);
+    } else if (c == '\n') {
+      if (stack->idx > 0) {
+        Modifier mod = peek(stack);
+        if (mod.mod == '#' || mod.mod == '-') {
+          pop(stack);
+        }
+      }
+    } else if (c == '*' || c == '_') {
+        if (stack->idx > 0) {
+          Modifier prev = peek(stack);
+          if (prev.mod == c) {
+            pop(stack);
+          } else {
+            Modifier mod = {.idx = idx, .mod = c};
+            push(stack, &mod);
+          }
+        } else {
+          Modifier mod = {.idx = idx, .mod = c};
+          push(stack, &mod);
+        }
+      }
+      c = getc(file);
+  }
+
+}
+
+void htmlize(Stack* stack) {
+  FILE* in = fopen("./some.md", "r");
+  FILE* out = fopen("./out.html", "w");
+
+  enum TokenKind tokens[10];
+  int idx = 0;
+  int count = 1; // used for the hashes
+  char c = getc(in);
+
+  while (c != EOF) {
+    printf("Next char = %c \n", c);
+    if (modifier_in_stack(stack, c)) {
+      putc(c, out);
+      c = getc(in);
+      continue;
+    }
+    
+
+    // printf("Char = %c \n", c);
+    switch (c) {
+      case '#': {
+        tokens[idx] = TOKEN_HASH;
+        count = 1;
+        while (1) {
+          c = getc(in);
+          if (c != '#') break;
+          count++; 
+        }
+        const char* result = get_tag('#', true, count);
+        write_tag(out, result);
+        idx++;
+        printf("Stopped at char = %c ", c);
+        continue;
+      }
+      case '-': {
+        tokens[idx] = TOKEN_LIST;
+        const char* result = get_tag('-', true, 0);
+        printf("Tag = %s \n", result);
+        write_tag(out, result);
+        idx++;
+        break;
+      }
+      case '*': {
+        tokens[idx] = TOKEN_BOLD;
+        int opener = !(tokens[idx-1] == TOKEN_BOLD);
+        if (opener) {
+          idx++;
+        } else idx--;
+        const char* result = get_tag('*', opener, 0);
+        write_tag(out, result);
+        break;
+      }
+      case '_': {
+        tokens[idx] = TOKEN_ITALIC;
+        int opener = !(tokens[idx-1] == TOKEN_ITALIC);
+        if (opener) {
+          idx++;
+        } else idx--;
+        const char* result = get_tag('_', opener, 0);
+        write_tag(out, result);
+        break;
+      }
+      case '\n': {
+        puts("GOT HERE");
+        enum TokenKind prev = tokens[idx-1];
+        char t;
+        if (prev != TOKEN_LIST && prev != TOKEN_HASH) {
+          putc(c, out);
+        } else {
+          if (prev == TOKEN_HASH) t = '#';
+          if (prev == TOKEN_LIST) t = '-';
+        
+          const char* result = get_tag(t, false, count);
+          printf("Tag = %s \n", result);
+          write_tag(out, result);
+          putc(c, out);
+          idx--;
+        }
+        break;
+      }
+      default:
+        putc(c, out);
+        break;
+    }
+    // printf("Idx = %d\n", idx);
+    c = getc(in);
+  }
+
+  fclose(in);
+  fclose(out);
+}
+
+int modifier_in_stack(Stack* stack, char c) {
+  for (int i = 0; i < stack->idx; i++) {
+    Modifier* item = stack->mod[i];
+    if (item->mod == c) return true;
+  }
+  return false;
+}
+
+void write_tag(FILE* file, const char* tag) {
+  int idx = 0;
+  // printf("Writing tag %s \n", tag);
+  while (true) {
+    putc(tag[idx], file);
+    if (tag[idx+1] == '>') {
+      putc('>', file);
+      break;
+    }
+    idx++;
+  }
+}
+
+const char* get_tag(char c, int opener, int count) {
+  switch (c) {
+    // char result[6];
+    char* result;
+    case '#': {
+      if (opener) {
+        sprintf(result, "<h%d>", count);
+      } else sprintf(result, "</h%d>", count);
+      return result;
+      // return "<h1>";
+    }
+    case '*': {
+      if (opener) return "<b>";
+      return "</b>";
+    }
+    case '_': {
+      if (opener) return "<i>";
+      return "</i>";
+    }
+    case '-': {
+      if (opener) return "<li>";
+      return "</li>";
+    }
+
+    default:
+      return (char[2]){c, '\0'};
+  }
+}

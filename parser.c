@@ -167,6 +167,7 @@ void text_as_ll(FILE* file)
             {
                 buffer[i] = 0;
             }
+            // append(char[2]{c, '\0'});
             if (c == '\n') append("\n");
             if (c == ' ') append(" ");
             if (c == '*') append("*");
