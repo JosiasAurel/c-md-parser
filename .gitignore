@@ -1,3 +1,10 @@
 
 node_modules
 *.wasm
+some*
+*.js
+out.html
+sample.html
+something
+parser
+parser.exe
