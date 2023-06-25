@@ -67,12 +67,11 @@ typedef struct {
   int count;
   Modifier* mod[100];
   int idx;
-  int idx_imut;
   int peek_idx;
 } Stack;
 
 void preprocess(FILE*, Stack*);
-int modifier_in_stack(Stack*, char);
+int modifier_in_stack(Stack*, char, int);
 const char* get_tag(char, int, int);
 void write_tag(FILE* file, const char* tag);
 void htmlize(Stack*);
@@ -97,7 +96,6 @@ Modifier peek(Stack* stack) {
 
 Modifier pop(Stack* stack) {
   stack->idx--;
-  stack->idx_imut--;
   Modifier result;
   result.count = stack->mod[stack->idx]->count;
   result.mod = stack->mod[stack->idx]->mod;
@@ -119,8 +117,15 @@ void preprocess(FILE * file, Stack* stack) {
 
   int idx = 0;
   char c = getc(file);
+  // this variable is used to check whether the previous
+  // character was actually a newline
+  // most useful for the # and - 
+  // since we only want to render a heading or list on a new line
+  char prev_char; 
+  int render_block = true;
   while (c != EOF) {
     if (c == '#') {
+      if (prev_char != '\n') render_block = false;
       Modifier mod = {.idx = idx, .mod = '#', .count = 1};
       if (stack->idx > 0) {
         Modifier item = pop(stack);
@@ -134,7 +139,12 @@ void preprocess(FILE * file, Stack* stack) {
       if (stack->idx > 0) {
         Modifier mod = peek(stack);
         if (mod.mod == '#' || mod.mod == '-') {
-          pop(stack);
+          Modifier a = peek(stack);
+          int is_space = prev_char == ' ';
+          if (render_block || a.idx == 0) {
+            render_block = true;
+            pop(stack);
+          }
         }
       }
     } else if (c == '*' || c == '_') {
@@ -152,6 +162,8 @@ void preprocess(FILE * file, Stack* stack) {
         }
       }
       c = getc(file);
+      if (c != '#' && c != '-') prev_char = c;
+      idx++;
   }
 
 }
@@ -162,14 +174,17 @@ void htmlize(Stack* stack) {
 
   enum TokenKind tokens[10];
   int idx = 0;
+  int char_idx = 0;
   int count = 1; // used for the hashes
   char c = getc(in);
 
   while (c != EOF) {
-    printf("Next char = %c \n", c);
-    if (modifier_in_stack(stack, c)) {
+    // printf("Next char = %c \n", c);
+    
+    if (modifier_in_stack(stack, c, char_idx)) {
       putc(c, out);
       c = getc(in);
+      char_idx++;
       continue;
     }
     
@@ -181,19 +196,20 @@ void htmlize(Stack* stack) {
         count = 1;
         while (1) {
           c = getc(in);
+          char_idx++;
           if (c != '#') break;
           count++; 
         }
         const char* result = get_tag('#', true, count);
         write_tag(out, result);
         idx++;
-        printf("Stopped at char = %c ", c);
+        // printf("Stopped at char = %c ", c);
         continue;
       }
       case '-': {
         tokens[idx] = TOKEN_LIST;
         const char* result = get_tag('-', true, 0);
-        printf("Tag = %s \n", result);
+        // printf("Tag = %s \n", result);
         write_tag(out, result);
         idx++;
         break;
@@ -219,7 +235,7 @@ void htmlize(Stack* stack) {
         break;
       }
       case '\n': {
-        puts("GOT HERE");
+        // puts("GOT HERE");
         enum TokenKind prev = tokens[idx-1];
         char t;
         if (prev != TOKEN_LIST && prev != TOKEN_HASH) {
@@ -229,7 +245,7 @@ void htmlize(Stack* stack) {
           if (prev == TOKEN_LIST) t = '-';
         
           const char* result = get_tag(t, false, count);
-          printf("Tag = %s \n", result);
+          // printf("Tag = %s \n", result);
           write_tag(out, result);
           putc(c, out);
           idx--;
@@ -242,16 +258,17 @@ void htmlize(Stack* stack) {
     }
     // printf("Idx = %d\n", idx);
     c = getc(in);
+    char_idx++;
   }
 
   fclose(in);
   fclose(out);
 }
 
-int modifier_in_stack(Stack* stack, char c) {
+int modifier_in_stack(Stack* stack, char c, int char_idx) {
   for (int i = 0; i < stack->idx; i++) {
     Modifier* item = stack->mod[i];
-    if (item->mod == c) return true;
+    if (item->mod == c && item->idx == char_idx) return true;
   }
   return false;
 }
