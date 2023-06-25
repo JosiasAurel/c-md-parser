@@ -1,52 +1,6 @@
-/*
-A new version of the md-to-html converter using a stack and some clearer reason if I may say so
-
-Should be able to convert basic markdown to html
-Consider supporting 
-- Headings (#)
-- Italics (_ _)
-- Bold text (* * )
-- Strikethrough (~ ~)
-- List item (-)
-
-* These operations should be nestable 
-
-> Some things to keep in mind
-Modifier pairs
-# -> \n
-_ -> _
-* -> *
-~ -> ~
-- -> \n
-
-Algorithm
-
-fn parse()
-  Stack s
-  Iter text c
-    if c is opening
-      push c 
-    elif c is closing
-      c is closingOf peek()
-      pop()
-
-# At the end we are left with either an empty stack or a stack that contains an element we are going to 
-# interpret as is in the text
-
-fn htmlize()
-  Stack s
-  Iter through text c
-    push c (enum)
-    if index c not in any in previous_s
-      replace with corresponding opening
-    else
-      replace with corresponding closing
-
-*/
-
-
 #include <stdio.h>
 #include <stdlib.h>
+
 #define true 1
 #define false 0
 
@@ -54,7 +8,8 @@ enum TokenKind {
   TOKEN_BOLD,
   TOKEN_HASH,
   TOKEN_ITALIC,
-  TOKEN_LIST
+  TOKEN_LIST,
+  TOKEN_STRIKE
 };
 
 typedef struct {
@@ -74,7 +29,7 @@ void preprocess(FILE*, Stack*);
 int modifier_in_stack(Stack*, char, int);
 const char* get_tag(char, int, int);
 void write_tag(FILE* file, const char* tag);
-void htmlize(Stack*);
+void htmlize(char*, char*, Stack*);
 
 void push(Stack* stack, Modifier* item) {
   Modifier* item_ptr = (Modifier*)malloc(sizeof(Modifier));
@@ -104,14 +59,7 @@ Modifier pop(Stack* stack) {
   return result;
 }
 
-int main() {
-  Stack stack = {.idx = 0, .peek_idx = 0};
-  FILE* file = fopen("./some.md", "r");
-  preprocess(file, &stack);
-  fclose(file);
-  htmlize(&stack);
-  // parse(sample);
-}
+
 
 void preprocess(FILE * file, Stack* stack) {
 
@@ -147,7 +95,7 @@ void preprocess(FILE * file, Stack* stack) {
           }
         }
       }
-    } else if (c == '*' || c == '_') {
+    } else if (c == '*' || c == '_' || c == '~') {
         if (stack->idx > 0) {
           Modifier prev = peek(stack);
           if (prev.mod == c) {
@@ -168,9 +116,9 @@ void preprocess(FILE * file, Stack* stack) {
 
 }
 
-void htmlize(Stack* stack) {
-  FILE* in = fopen("./some.md", "r");
-  FILE* out = fopen("./out.html", "w");
+void htmlize(char* input, char* output, Stack* stack) {
+  FILE* in = fopen(input, "r");
+  FILE* out = fopen(output, "w");
 
   enum TokenKind tokens[10];
   int idx = 0;
@@ -234,12 +182,22 @@ void htmlize(Stack* stack) {
         write_tag(out, result);
         break;
       }
+      case '~': {
+        tokens[idx] = TOKEN_STRIKE; 
+        int opener = !(tokens[idx-1] == TOKEN_STRIKE);
+        if (opener) {
+          idx++;
+        } else idx--;
+        const char* result = get_tag('~', opener, 0);
+        write_tag(out, result);
+      }
       case '\n': {
         // puts("GOT HERE");
         enum TokenKind prev = tokens[idx-1];
         char t;
         if (prev != TOKEN_LIST && prev != TOKEN_HASH) {
-          putc(c, out);
+          // putc(c, out);
+          write_tag(out, "<br />");
         } else {
           if (prev == TOKEN_HASH) t = '#';
           if (prev == TOKEN_LIST) t = '-';
@@ -309,8 +267,26 @@ const char* get_tag(char c, int opener, int count) {
       if (opener) return "<li>";
       return "</li>";
     }
-
+    case '~': {
+      if (opener) return "<strike>";
+      return "</strike>";
+    }
     default:
       return (char[2]){c, '\0'};
   }
+}
+
+int main(int argc, char* argv[]) {
+
+  if (argc != 3) puts("Not enough or too many arguments");
+
+  char* input_file = argv[1];
+  char* output_file = argv[2];
+
+  Stack stack = {.idx = 0, .peek_idx = 0};
+  FILE* file = fopen(input_file, "r");
+  preprocess(file, &stack);
+
+  fclose(file);
+  htmlize(input_file, output_file, &stack);
 }
