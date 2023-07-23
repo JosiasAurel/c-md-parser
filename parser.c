@@ -1,357 +1,292 @@
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
 
-struct Node
-{
-    struct Node* prev;
-    struct Node* next;
-    char value[20];
+#define true 1
+#define false 0
+
+enum TokenKind {
+  TOKEN_BOLD,
+  TOKEN_HASH,
+  TOKEN_ITALIC,
+  TOKEN_LIST,
+  TOKEN_STRIKE
 };
 
-typedef struct 
-{
-    int count; // represents the number of nodes in the linked list
-    struct Node* head;
-    struct Node* tail;
-} LL;
+typedef struct {
+  char mod;
+  int idx;
+  int count; // used only in the case of a #
+} Modifier;
 
-LL ll = { .head = NULL, .tail = NULL, .count = 0 };
+typedef struct {
+  int count;
+  Modifier* mod[100];
+  int idx;
+  int peek_idx;
+} Stack;
 
-struct Node* create_node(const char* value)
-{
-    struct Node* node = malloc(sizeof(struct Node));
-    strcpy(node->value, value);
-    return node;
+void preprocess(FILE*, Stack*);
+int modifier_in_stack(Stack*, char, int);
+const char* get_tag(char, int, int);
+void write_tag(FILE* file, const char* tag);
+void htmlize(char*, char*, Stack*);
+
+void push(Stack* stack, Modifier* item) {
+  Modifier* item_ptr = (Modifier*)malloc(sizeof(Modifier));
+  item_ptr->count = item->count;
+  item_ptr->idx = item->idx;
+  item_ptr->mod = item->mod;
+  stack->mod[stack->idx] = item_ptr;
+  stack->idx++;
+  stack->peek_idx++;
 }
 
-void append(const char* value)
-{
-    ll.count++;
-    struct Node* new_node = create_node(value);
-    new_node->next = NULL;
-    if (ll.head == NULL)
-    {
-        new_node->prev = NULL;
-        ll.head = new_node;
-        ll.tail = new_node;
-        return;
-    }
-    // ll.head = new_node;
-    new_node->prev = ll.tail;
-    ll.tail->next = new_node;
-    ll.tail = new_node;
-    return;
+Modifier peek(Stack* stack) {
+  Modifier result;
+  result.count = stack->mod[stack->idx - 1]->count;
+  result.mod = stack->mod[stack->idx -1]->mod;
+  result.idx = stack->mod[stack->idx - 1]->idx;
+  return result;
 }
 
-struct Node* node_at(int index)
-{
-    struct Node* curr_node;
-    if (ll.head != NULL && index > 0 && index <= ll.count) { curr_node = ll.head; } else { return NULL; }
-    int count = 0;
-    while (count < index-1 && curr_node != NULL)
-    {
-        curr_node = curr_node->next; 
-        count++;
-    }
-    return curr_node;
+Modifier pop(Stack* stack) {
+  stack->idx--;
+  Modifier result;
+  result.count = stack->mod[stack->idx]->count;
+  result.mod = stack->mod[stack->idx]->mod;
+  result.idx = stack->mod[stack->idx]->idx;
+  free(stack->mod[stack->idx]);
+  return result;
 }
 
-// insert the value at the specified index
-// if there is a node at the position, it will push that node forward
-// if there is no node at that index, it will return -1
-int insert_before(int index, char* value) {
-    struct Node* node = create_node(value);
-    struct Node* node_at_index = node_at(index);
-    if (node_at_index != NULL) 
-    {
-        struct Node* prev = node_at_index->prev; 
-        node_at_index->prev = node;
-        if (prev != NULL) prev->next = node;
-        node->next = node_at_index;
-        node->prev = prev != NULL ? prev : NULL;
-        if (prev == NULL) ll.head = node;
-    } else return -1;
-    ll.count++;
-    return 0;
-}
 
-int insert_after(int index, char* value)
-{
-    struct Node* node = create_node(value);
-    struct Node* node_at_index = node_at(index);
-    if (node_at_index != NULL)
-    {
-        struct Node* next = node_at_index->next;
-        node_at_index->next = node;
-        if (next != NULL) next->prev = node;
-        node->prev = node_at_index;
-        node->next = next != NULL ? next : NULL;
-        if (next == NULL) ll.tail = node;
-    } else return -1;
-    ll.count++;
-    return 0;
-}
 
-// thou shall silently crash
-void delete(int index)
-{
-    struct Node* node = node_at(index);
-    if (node != NULL)
-    {
-        if (node->prev == NULL)
-        {
-            if (node->next != NULL) 
-            {
-                node->next->prev = NULL;
-                ll.head = node->next;
-            }
-        } 
-        else
-        {
-            if (node->next != NULL) node->next->prev = node->prev;
-            node->prev->next = node->next;
+void preprocess(FILE * file, Stack* stack) {
+
+  int idx = 0;
+  char c = getc(file);
+  // this variable is used to check whether the previous
+  // character was actually a newline
+  // most useful for the # and - 
+  // since we only want to render a heading or list on a new line
+  char prev_char; 
+  int render_block = true;
+  while (c != EOF) {
+    if (c == '#') {
+      if (prev_char != '\n') render_block = false;
+      Modifier mod = {.idx = idx, .mod = '#', .count = 1};
+      if (stack->idx > 0) {
+        Modifier item = pop(stack);
+        if (item.mod == '#') item.count++;
+        push(stack, &item);
+      } else push(stack, &mod);
+    } else if (c == '-') {
+      Modifier mod = {.idx = idx, .mod = '-'};
+      push(stack, &mod);
+    } else if (c == '\n') {
+      if (stack->idx > 0) {
+        Modifier mod = peek(stack);
+        if (mod.mod == '#' || mod.mod == '-') {
+          Modifier a = peek(stack);
+          int is_space = prev_char == ' ';
+          if (render_block || a.idx == 0) {
+            render_block = true;
+            pop(stack);
+          }
         }
-
-        free(node); // PURGE!!!!!!!!!!!!! 
-        ll.count--;
-    }
-}
-
-// this will free all memory allocated
-void clear_ll()
-{
-    struct Node* node = ll.head;
-    for (int i = 0; i < ll.count; i++)
-    {
-        struct Node* c_node = node;
-        node = node->next;
-        free(c_node);
-    }
-}
-
-void naive_traverse()
-{
-    struct Node* curr_node = ll.head;
-    for (int i = 0; i < ll.count; i++)
-    {
-        printf("%s", curr_node->value);
-        curr_node = curr_node->next;
-    }
-}
-
-// reads text and writes each word into a Linked List
-void text_as_ll(FILE* file)
-{
-    char c = getc(file);
-    char buffer[40];
-    int idx = 0;
-    while (c != EOF)
-    {
-        if (
-                c != ' ' 
-                && c != '\n' 
-                && c != '*' 
-                && c != '_' 
-                && c != '~' 
-                && c != '`')
-        {
-            buffer[idx] = c;
-            idx++;
-        } 
-        else
-        {
-            append(buffer);
-            idx = 0;
-            for (int i = 0; i < 20; i++)
-            {
-                buffer[i] = 0;
-            }
-            // append(char[2]{c, '\0'});
-            if (c == '\n') append("\n");
-            if (c == ' ') append(" ");
-            if (c == '*') append("*");
-            if (c == '_') append("_");
-            if (c == '~') append("~");
-            if (c == '`') append("`");
+      }
+    } else if (c == '*' || c == '_' || c == '~') {
+        if (stack->idx > 0) {
+          Modifier prev = peek(stack);
+          if (prev.mod == c) {
+            pop(stack);
+          } else {
+            Modifier mod = {.idx = idx, .mod = c};
+            push(stack, &mod);
+          }
+        } else {
+          Modifier mod = {.idx = idx, .mod = c};
+          push(stack, &mod);
         }
-        c = getc(file);
-    }
+      }
+      c = getc(file);
+      if (c != '#' && c != '-') prev_char = c;
+      idx++;
+  }
+
 }
 
-// converts headings to corresponding html tags
-void match_headings(int idx)
-{
-    int h_count = 0;
-    // count the number of headings
-    struct Node* node = node_at(idx);
-    for (int i = 0; i < 4; i++)
-    {
-        if (node->value[i] == '#')
-        {
-            h_count++;
-        } else break;
-    }
+void htmlize(char* input, char* output, Stack* stack) {
+  FILE* in = fopen(input, "r");
+  FILE* out = fopen(output, "w");
 
-    struct Node* next_node = node->next;
-    int last_word_idx = idx+1; // index of last word before the next \n
-    while (strcmp(next_node->value, "\n") != 0)
-    {
-        next_node = next_node->next;
-        last_word_idx++;
-    }
+  enum TokenKind tokens[10];
+  int idx = 0;
+  int char_idx = 0;
+  int count = 1; // used for the hashes
+  char c = getc(in);
 
-    char opening[6];
-    char closing[6];
+  while (c != EOF) {
+    // printf("Next char = %c \n", c);
     
-    sprintf(opening, "<h%d>", h_count);
-    sprintf(closing, "</h%d>", h_count);
+    if (modifier_in_stack(stack, c, char_idx)) {
+      putc(c, out);
+      c = getc(in);
+      char_idx++;
+      continue;
+    }
     
-    insert_before(idx+1, opening);
-    insert_after(last_word_idx, closing);
-   
-    delete(idx); // delete the hashtags
-    delete(idx+1); // delete the whitespace after it
-}
 
-// handle blockquotes
-void match_block(int idx)
-{
-    struct Node* node = node_at(idx);
-    struct Node* next = node->next;
-    int last_word_idx = idx+1;
-    while (strcmp(next->value, "\n") != 0)
-    {
-        next = next->next;
-        last_word_idx++;
+    // printf("Char = %c \n", c);
+    switch (c) {
+      case '#': {
+        tokens[idx] = TOKEN_HASH;
+        count = 1;
+        while (1) {
+          c = getc(in);
+          char_idx++;
+          if (c != '#') break;
+          count++; 
+        }
+        const char* result = get_tag('#', true, count);
+        write_tag(out, result);
+        idx++;
+        // printf("Stopped at char = %c ", c);
+        continue;
+      }
+      case '-': {
+        tokens[idx] = TOKEN_LIST;
+        const char* result = get_tag('-', true, 0);
+        // printf("Tag = %s \n", result);
+        write_tag(out, result);
+        idx++;
+        break;
+      }
+      case '*': {
+        tokens[idx] = TOKEN_BOLD;
+        int opener = !(tokens[idx-1] == TOKEN_BOLD);
+        if (opener) {
+          idx++;
+        } else idx--;
+        const char* result = get_tag('*', opener, 0);
+        write_tag(out, result);
+        break;
+      }
+      case '_': {
+        tokens[idx] = TOKEN_ITALIC;
+        int opener = !(tokens[idx-1] == TOKEN_ITALIC);
+        if (opener) {
+          idx++;
+        } else idx--;
+        const char* result = get_tag('_', opener, 0);
+        write_tag(out, result);
+        break;
+      }
+      case '~': {
+        tokens[idx] = TOKEN_STRIKE; 
+        int opener = !(tokens[idx-1] == TOKEN_STRIKE);
+        if (opener) {
+          idx++;
+        } else idx--;
+        const char* result = get_tag('~', opener, 0);
+        write_tag(out, result);
+      }
+      case '\n': {
+        // puts("GOT HERE");
+        enum TokenKind prev = tokens[idx-1];
+        char t;
+        if (prev != TOKEN_LIST && prev != TOKEN_HASH) {
+          // putc(c, out);
+          write_tag(out, "<br />");
+        } else {
+          if (prev == TOKEN_HASH) t = '#';
+          if (prev == TOKEN_LIST) t = '-';
+        
+          const char* result = get_tag(t, false, count);
+          // printf("Tag = %s \n", result);
+          write_tag(out, result);
+          putc(c, out);
+          idx--;
+        }
+        break;
+      }
+      default:
+        putc(c, out);
+        break;
     }
+    // printf("Idx = %d\n", idx);
+    c = getc(in);
+    char_idx++;
+  }
 
-    strcpy(node->value, "<blockquote>");
-    insert_after(last_word_idx, "</blockquote>");
+  fclose(in);
+  fclose(out);
 }
-// converts list into unordered list
-void match_list(int idx)
-{
-    struct Node* node = node_at(idx);
-    struct Node* next = node->next;
-    int last_node_idx = idx+1;
-    while (strcmp(next->value, "\n") != 0)
-    {
-        next = next->next;
-        last_node_idx++;
+
+int modifier_in_stack(Stack* stack, char c, int char_idx) {
+  for (int i = 0; i < stack->idx; i++) {
+    Modifier* item = stack->mod[i];
+    if (item->mod == c && item->idx == char_idx) return true;
+  }
+  return false;
+}
+
+void write_tag(FILE* file, const char* tag) {
+  int idx = 0;
+  // printf("Writing tag %s \n", tag);
+  while (true) {
+    putc(tag[idx], file);
+    if (tag[idx+1] == '>') {
+      putc('>', file);
+      break;
     }
-    strcpy(node->value, "<li>");
-    insert_after(last_node_idx, "</li>");
-    insert_after(last_node_idx+1, "\n");
+    idx++;
+  }
 }
 
-
-// matches _,*,~,`,´´´
-void match_duals(int idx)
-{
-    // find next special character
-    struct Node* node = node_at(idx);
-    struct Node* next = node->next;
-    while (strcmp(next->value, "\n") != 0)
-    { 
-        if (strcmp(next->value, "*") == 0)
-        {
-            strcpy(node->value, "<b>");
-            strcpy(next->value, "</b>");
-            break;
-        } else if (strcmp(next->value, "_") == 0)
-        {
-            strcpy(node->value, "<i>");
-            strcpy(next->value, "</i>");
-            break;
-        }
-        else if (strcmp(next->value, "~") == 0)
-        {
-            strcpy(node->value, "<strike>");
-            strcpy(next->value, "</strike>");
-            break;
-        }
-        else if (strcmp(next->value, "`") == 0)
-        {
-            strcpy(node->value, "<em>");
-            strcpy(next->value, "</em>");
-            break;   
-        }
-
-        next = next->next;
-    } return;
-}
-
-void parse()
-{
-    struct Node* node = ll.head;
-    int idx = 1;
-    while (node->next != NULL)
-    {
-        if (
-                strcmp(node->value, "*") == 0 
-                || strcmp(node->value, "_") == 0 
-                || strcmp(node->value, "~") == 0
-                || strcmp(node->value, "`") == 0 
-            )
-        {
-            match_duals(idx);
-        }
-        if (strcmp(node->value, "-") == 0)
-        {
-            if (idx == 1 || strcmp(node_at(idx-1)->value, "\n") == 0) match_list(idx);
-        }
-        if ((idx == 1 || strcmp(node_at(idx-1)->value, "\n") == 0)
-                && strcmp(node->value, ">") == 0)
-        {
-            match_block(idx);
-        }
-        if ( (idx == 1 || strcmp(node_at(idx-1)->value, "\n") == 0)
-                && node->value[0] == '#' 
-                && (strcmp(node->next->value, " ") == 0)
-            )
-        {
-            match_headings(idx);
-        } else idx++;
-        node = node_at(idx);
-        // idx++;
+const char* get_tag(char c, int opener, int count) {
+  switch (c) {
+    // char result[6];
+    char* result;
+    case '#': {
+      if (opener) {
+        sprintf(result, "<h%d>", count);
+      } else sprintf(result, "</h%d>", count);
+      return result;
+      // return "<h1>";
     }
+    case '*': {
+      if (opener) return "<b>";
+      return "</b>";
+    }
+    case '_': {
+      if (opener) return "<i>";
+      return "</i>";
+    }
+    case '-': {
+      if (opener) return "<li>";
+      return "</li>";
+    }
+    case '~': {
+      if (opener) return "<strike>";
+      return "</strike>";
+    }
+    default:
+      return (char[2]){c, '\0'};
+  }
 }
 
-void join_and_save(char* outfile_name)
-{
-    FILE* out = fopen(outfile_name, "w");
-    struct Node* node = ll.head;
-    for (int i = 0; i < ll.count && node != NULL; i++)
-    {
-        int length = strlen(node->value);
-        for (int j = 0; j < length; j++)
-        {
-            putc(node->value[j], out);
-        }
-        node = node->next;
-    }
-    fclose(out);
-}
 int main(int argc, char* argv[]) {
-    
-    // check if there are 3 arguments
-    // first is the binary file name
-    // second and third should be the input and output file names 
-    if (argc == 3) {} 
-    else { printf("Not enough or too many arguments \n"); exit(1); }
-     
-    char* input_file = argv[1];
-    char* output_file = argv[2];
 
-    FILE* file = fopen(input_file, "r");
-    
-    text_as_ll(file); // convert the contents of the file to a linked list
-    fclose(file);
-    // naive_traverse(); 
-    parse();
-    join_and_save(output_file);
-    clear_ll();
-    return 0;
+  if (argc != 3) puts("Not enough or too many arguments");
+
+  char* input_file = argv[1];
+  char* output_file = argv[2];
+
+  Stack stack = {.idx = 0, .peek_idx = 0};
+  FILE* file = fopen(input_file, "r");
+  preprocess(file, &stack);
+
+  fclose(file);
+  htmlize(input_file, output_file, &stack);
 }
-
