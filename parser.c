@@ -246,8 +246,8 @@ void write_tag(FILE* file, const char* tag) {
 
 const char* get_tag(char c, int opener, int count) {
   switch (c) {
-    // char result[6];
-    char* result;
+    char result[6];
+    // char* result;
     case '#': {
       if (opener) {
         sprintf(result, "<h%d>", count);
